@@ -278,13 +278,9 @@ static dispatch_queue_t pnd_backgroundQueue(void)
 		free(dynamic);
 		
 		char *type = property_copyAttributeValue(property, "T");
-		BOOL isValidType = NO;
+		BOOL isValidType = !!strchr(PNDUserDefaultsControllerValidPropertyTypes, *type);
 		
-		if (strlen(type) == 1)
-		{
-			isValidType = !!strchr(PNDUserDefaultsControllerValidPropertyTypes, *type);
-		}
-		else
+		if (!isValidType)
 		{
 			NSUInteger i, count = sizeof(PNDUserDefaultsControllerValidComplexPropertyTypes) / sizeof(PNDUserDefaultsControllerValidComplexPropertyTypes[0]);
 			for (i = 0; !isValidType && i < count; ++i)
