@@ -13,6 +13,7 @@
 #import "PNDUserDefaultsController.h"
 
 static char *const PNDUserDefaultsControllerKVOContext = "PNDUserDefaultsControllerKVOContext";
+static char *const PNDUserDefaultsControllerSharedControllerKey = "PNDUserDefaultsControllerSharedControllerKey";
 static const char *const PNDUserDefaultsControllerValidPropertyTypes = "cislqCISLQfdB@#";
 static const char *const PNDUserDefaultsControllerValidComplexPropertyTypes[] = {
 	@encode(CGAffineTransform),
@@ -24,9 +25,20 @@ static const char *const PNDUserDefaultsControllerValidComplexPropertyTypes[] = 
 	@encode(UIOffset)
 };
 
+static dispatch_queue_t pnd_backgroundQueue(void)
+{
+	static dispatch_queue_t backgroundQueue;
+	static dispatch_once_t onceToken;
+	dispatch_once(&onceToken, ^{
+		backgroundQueue = dispatch_queue_create("us.pandamonia.PNDUserDefaultsController.backgroundQueue", DISPATCH_QUEUE_SERIAL);
+	});
+	
+	return backgroundQueue;
+}
+
 @interface PNDUserDefaultsController ()
 
-@property (nonatomic, getter = PND_isUpdatingUserDefaults, setter = PND_setUpdatingUserDefaults:) BOOL PND_updatingUserDefaults;
+@property (nonatomic, getter = pnd_isUpdatingUserDefaults, setter = pnd_setUpdatingUserDefaults:) BOOL pnd_updatingUserDefaults;
 
 @end
 
@@ -47,13 +59,19 @@ static const char *const PNDUserDefaultsControllerValidComplexPropertyTypes[] = 
 
 + (instancetype)sharedController
 {
-	static PNDUserDefaultsController *sharedController;
-	static dispatch_once_t onceToken;
-	dispatch_once(&onceToken, ^{
-		sharedController = [[self alloc] init];
+	__block PNDUserDefaultsController *controller;
+	
+	dispatch_sync(pnd_backgroundQueue(), ^{
+		controller = objc_getAssociatedObject(self, PNDUserDefaultsControllerSharedControllerKey);
+		
+		if (!controller)
+		{
+			controller = [[self alloc] init];
+			objc_setAssociatedObject(self, PNDUserDefaultsControllerSharedControllerKey, controller, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+		}
 	});
 	
-	return sharedController;
+	return controller;
 }
 
 + (NSDictionary *)propertiesForUserDefaultsKeys
@@ -79,7 +97,7 @@ static const char *const PNDUserDefaultsControllerValidComplexPropertyTypes[] = 
 		NSString *userDefaultsKey = [self.class propertiesForUserDefaultsKeys][keyPath];
 		if (!userDefaultsKey) return;
 		
-		self.PND_updatingUserDefaults = YES;
+		self.pnd_updatingUserDefaults = YES;
 		
 		id obj = [self valueForKey:keyPath];
 		NSUserDefaults *sud = [NSUserDefaults standardUserDefaults];
@@ -155,7 +173,7 @@ static const char *const PNDUserDefaultsControllerValidComplexPropertyTypes[] = 
 		
 		free(type);
 		
-		self.PND_updatingUserDefaults = NO;
+		self.pnd_updatingUserDefaults = NO;
 	}
 	else
 	{
@@ -164,7 +182,7 @@ static const char *const PNDUserDefaultsControllerValidComplexPropertyTypes[] = 
 }
 - (void)userDefaultsDidChange:(NSNotification *)note
 {
-	if (self.PND_updatingUserDefaults)
+	if (self.pnd_updatingUserDefaults)
 		return;
 	
 	NSUserDefaults *sud = [NSUserDefaults standardUserDefaults];
